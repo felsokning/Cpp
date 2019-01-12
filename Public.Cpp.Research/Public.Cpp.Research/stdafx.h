@@ -17,10 +17,13 @@
 #include <atlbase.h>
 #include <atlconv.h>
 #include <psapi.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <time.h>
+#include <timeapi.h>
 #include <tlhelp32.h>
 #include <VersionHelpers.h>
 #include <wchar.h>

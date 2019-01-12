@@ -35,5 +35,8 @@
     <ClCompile Include="UnmanagedDebugging.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Veckan.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
