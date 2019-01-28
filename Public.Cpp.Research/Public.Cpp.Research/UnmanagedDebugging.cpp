@@ -13,7 +13,7 @@ typedef struct _STR_ARRAY
 } STR_ARRAY;
 
 // Human-readable names for the different synchronization types.
-STR_ARRAY STR_OBJECT_TYPE[] =
+STR_ARRAY str_object_type[] =
 {
 	{ "CriticalSection" },
 	{ "SendMessage" },
@@ -29,25 +29,25 @@ STR_ARRAY STR_OBJECT_TYPE[] =
 };
 
 // Global variable to store the WCT session handle
-HWCT g_WctHandle = NULL;
+HWCT g_WctHandle = nullptr;
 
 // Global variable to store OLE32.DLL module handle.
-HMODULE g_Ole32Hnd = NULL;
+HMODULE g_Ole32Hnd = nullptr;
 
-// Global variable used to pass back to the Marshalled caller.
+// Global variable used to pass back to the caller.
 //wchar_t* OutString;
-std::wstring OutString = std::wstring();
+std::wstring out_string = std::wstring();
 
 /*++
 	Define the method.
 ++*/
 void
-PrintWaitChain(
-	__in DWORD ThreadId
+print_wait_chain(
+	__in DWORD thread_id
 );
 
 BOOL
-InitCOMAccess()
+init_com_access()
 /*++
 
 Routine Description:
@@ -57,35 +57,36 @@ Routine Description:
 
 --*/
 {
-	PCOGETCALLSTATE			CallStateCallback;
-	PCOGETACTIVATIONSTATE	ActivationStateCallback;
-
 	// Get a handle to OLE32.DLL. You must keep this handle around
 	// for the life time for any WCT session.
 	g_Ole32Hnd = LoadLibrary(L"ole32.dll");
 	if (!g_Ole32Hnd)
 	{
-		OutString.append(L"ERROR: GetModuleHandle failed: 0x%X\n", GetLastError());
+		out_string.append(L"ERROR: GetModuleHandle failed: 0x%X\n", GetLastError());
 		return FALSE;
 	}
 
 	// Retrieve the function addresses for the COM helper APIs.
-	CallStateCallback = (PCOGETCALLSTATE)GetProcAddress(g_Ole32Hnd, "CoGetCallState");
-	if (!CallStateCallback)
+	// ReSharper disable CppLocalVariableMayBeConst
+	PCOGETCALLSTATE call_state_callback = reinterpret_cast<PCOGETCALLSTATE>(GetProcAddress(g_Ole32Hnd, "CoGetCallState"));
+	// ReSharper restore CppLocalVariableMayBeConst
+	if (!call_state_callback)
 	{
-		OutString.append(L"ERROR: GetProcAddress failed: 0x%X\n", GetLastError());
+		out_string.append(L"ERROR: GetProcAddress failed: 0x%X\n", GetLastError());
 		return FALSE;
 	}
 
-	ActivationStateCallback = (PCOGETACTIVATIONSTATE)GetProcAddress(g_Ole32Hnd, "CoGetActivationState");
-	if (!ActivationStateCallback)
+	// ReSharper disable CppLocalVariableMayBeConst
+	PCOGETACTIVATIONSTATE activation_state_callback = reinterpret_cast<PCOGETACTIVATIONSTATE>(GetProcAddress(g_Ole32Hnd, "CoGetActivationState"));  // NOLINT
+	// ReSharper restore CppLocalVariableMayBeConst
+	if (!activation_state_callback)
 	{
-		OutString.append(L"ERROR: GetProcAddress failed: 0x%X\n", GetLastError());
+		out_string.append(L"ERROR: GetProcAddress failed: 0x%X\n", GetLastError());
 		return FALSE;
 	}
 
 	// Register these functions with WCT.
-	RegisterWaitChainCOMCallback(CallStateCallback, ActivationStateCallback);
+	RegisterWaitChainCOMCallback(call_state_callback, activation_state_callback);
 	return TRUE;
 }
 
@@ -109,57 +110,59 @@ Return Value:
 
 --*/
 {
-	BOOL                fSuccess = FALSE;
-	HANDLE              TokenHandle = INVALID_HANDLE_VALUE;
-	TOKEN_PRIVILEGES    TokenPrivileges;
+	BOOL                f_success = FALSE;
+	HANDLE              token_handle = INVALID_HANDLE_VALUE;
+	TOKEN_PRIVILEGES    token_privileges;
 
 	if (!OpenProcessToken(GetCurrentProcess(),
 		TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
-		&TokenHandle))
+		&token_handle))
 	{
-		OutString.append(L"Could not get the process token. Error (0X%x)\n", GetLastError());
-		goto Cleanup;
+		out_string.append(L"Could not get the process token. Error (0X%x)\n", GetLastError());
+		goto Cleanup; // NOLINT
 	}
 
-	TokenPrivileges.PrivilegeCount = 1;
+	token_privileges.PrivilegeCount = 1;
 
-	if (!LookupPrivilegeValue(NULL,
+	if (!LookupPrivilegeValue(nullptr,
 		SE_DEBUG_NAME,
-		&TokenPrivileges.Privileges[0].Luid))
+		&token_privileges.Privileges[0].Luid))
 	{
-		OutString.append(L"Couldn't lookup the SeDebugPrivilege name. Error (0X%x)\n", GetLastError());
-		goto Cleanup;
+		out_string.append(L"Couldn't lookup the SeDebugPrivilege name. Error (0X%x)\n", GetLastError());
+		goto Cleanup; // NOLINT
 	}
 
-	TokenPrivileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+	token_privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
 
-	if (!AdjustTokenPrivileges(TokenHandle,
+	if (!AdjustTokenPrivileges(token_handle,
 		FALSE,
-		&TokenPrivileges,
-		sizeof(TokenPrivileges),
-		NULL,
-		NULL))
+		&token_privileges,
+		sizeof(token_privileges),
+		nullptr,
+		nullptr))
 	{
-		OutString.append(L"Could not revoke the debug privilege. Error (0X%x)\n", GetLastError());
-		goto Cleanup;
+		out_string.append(L"Could not revoke the debug privilege. Error (0X%x)\n", GetLastError());
+		goto Cleanup;  // NOLINT
 	}
 
-	fSuccess = TRUE;
-	goto Cleanup;
+	f_success = TRUE;
+	goto Cleanup; // NOLINT
 
 
 Cleanup:
-	if (TokenHandle)
+	if (token_handle)
 	{
-		CloseHandle(TokenHandle);
+		CloseHandle(token_handle);
 	}
 
-	return fSuccess;
+	return f_success;
 }
 
 HANDLE
 GetProcessHandle(
-	__in DWORD	ProcId
+	// ReSharper disable CppParameterMayBeConst
+	__in DWORD	proc_id
+	// ReSharper restore CppParameterMayBeConst
 )
 /*++
 
@@ -177,85 +180,98 @@ Return Value:
 
 --*/
 {
-	HANDLE      processHandle = INVALID_HANDLE_VALUE;
-	processHandle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, ProcId);
-	if (processHandle == NULL || processHandle == INVALID_HANDLE_VALUE)
+	// ReSharper disable CppInitializedValueIsAlwaysRewritten
+	HANDLE      process_handle = INVALID_HANDLE_VALUE;
+	// ReSharper restore CppInitializedValueIsAlwaysRewritten
+	process_handle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, proc_id);
+	if (process_handle == nullptr || process_handle == INVALID_HANDLE_VALUE)
 	{
-		std::string test = std::string();
-		test = "We were unable to obtain the handle for the process specified. Error: ";
-		test += std::to_string(GetLastError());
-		std::wstring testing = std::wstring(test.begin(), test.end());
-		OutString.append(testing);
+		std::string process_handle_string = "We were unable to obtain the handle for the process specified. Error: ";
+		process_handle_string += std::to_string(GetLastError());
+		// ReSharper disable CppLocalVariableMayBeConst
+		std::wstring testing = std::wstring(process_handle_string.begin(), process_handle_string.end());
+		// ReSharper restore CppLocalVariableMayBeConst
+		out_string.append(testing);
 	}
 
 	// Caller is responsible for disposable.
-	return processHandle;
+	return process_handle;
 }
 
 HANDLE
-GetProcessSnapShotHandle(
-	__in HANDLE Process
+get_process_snap_shot_handle(
+	// ReSharper disable CppParameterMayBeConst
+	__in HANDLE process
+	// ReSharper restore CppParameterMayBeConst
 )
 {
-	HANDLE snapShotHandle = INVALID_HANDLE_VALUE;
-	std::string test = std::string();
-	std::wstring testing = std::wstring();
+	// ReSharper disable CppInitializedValueIsAlwaysRewritten
+	HANDLE snap_shot_handle = INVALID_HANDLE_VALUE;
+	std::string process_snapshot_handle_string = std::string();
+	std::wstring process_snapshot_handle_wide_string = std::wstring();
+	// ReSharper restore CppInitializedValueIsAlwaysRewritten
 
-	snapShotHandle = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, GetProcessId(Process));
-	if (snapShotHandle == INVALID_HANDLE_VALUE)
+	snap_shot_handle = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, GetProcessId(process));
+	if (snap_shot_handle == INVALID_HANDLE_VALUE)
 	{
-		test = "We were unable to obtain the snapshot handle for the process specified. Error: ";
-		test += std::to_string(GetLastError());
-		testing = std::wstring(test.begin(), test.end());
-		OutString.append(testing);
+		process_snapshot_handle_string = "We were unable to obtain the snapshot handle for the process specified. Error: ";
+		process_snapshot_handle_string += std::to_string(GetLastError());
+		process_snapshot_handle_wide_string = std::wstring(process_snapshot_handle_string.begin(), process_snapshot_handle_string.end());
+		out_string.append(process_snapshot_handle_wide_string);
 	}
 
-	return snapShotHandle;
+	return snap_shot_handle;
 }
 
 void
-WalkThreadsAndPrintChains(
+walk_threads_and_print_chains(
+	// ReSharper disable CppParameterMayBeConst
 	__in HANDLE process,
-	__in HANDLE processSnapShot
+	__in HANDLE process_snap_shot
+	// ReSharper restore CppParameterMayBeConst
 )
 {
 	THREADENTRY32	thread;
 	thread.dwSize = sizeof(thread);
-	DWORD processId = GetProcessId(process);
+	// ReSharper disable CppLocalVariableMayBeConst
+	DWORD process_id = GetProcessId(process);
+	// ReSharper restore CppLocalVariableMayBeConst
 
 	// No point in continuing if we can't get in.
-	if (Thread32First(processSnapShot, &thread))
+	if (Thread32First(process_snap_shot, &thread))
 	{
 		// Walk the thread list and print each wait chain
 		do
 		{
-			if (thread.th32OwnerProcessID == processId)
+			if (thread.th32OwnerProcessID == process_id)
 			{
 				// Open a handle to this specific thread
-				HANDLE threadHandle = OpenThread(THREAD_ALL_ACCESS, FALSE, thread.th32ThreadID);
-				if (threadHandle != NULL)
+				// ReSharper disable CppLocalVariableMayBeConst
+				HANDLE thread_handle = OpenThread(THREAD_ALL_ACCESS, FALSE, thread.th32ThreadID);
+				// ReSharper restore CppLocalVariableMayBeConst
+				if (thread_handle != nullptr)
 				{
 					// Check whether the thread is still running
 					DWORD exitCode;
-					GetExitCodeThread(threadHandle, &exitCode);
+					GetExitCodeThread(thread_handle, &exitCode);
 
 					if (exitCode == STILL_ACTIVE)
 					{
 						// Print the wait chain.
-						PrintWaitChain(thread.th32ThreadID);
+						print_wait_chain(thread.th32ThreadID);
 					}
 
 					// Always close your handles for SCIENCE!
-					CloseHandle(threadHandle);
+					CloseHandle(thread_handle);
 				}
 			}
-		} while (Thread32Next(processSnapShot, &thread));
+		} while (Thread32Next(process_snap_shot, &thread));
 	}
 }
 
 void
-PrintWaitChain(
-	__in DWORD ThreadId
+print_wait_chain(
+	__in DWORD thread_id
 )
 /*++
 
@@ -278,97 +294,100 @@ Return Value:
 	DWORD					Count, i;
 	BOOL					IsCycle;
 
-	std::string ts = std::to_string(ThreadId);
+	std::string ts = std::to_string(thread_id);
 	ts += "	";
 	std::wstring test = std::wstring(ts.begin(), ts.end());
-	OutString.append(test);
+	out_string.append(test);
 
 	Count = WCT_MAX_NODE_COUNT;
 
 	// Make a synchronous WCT call to retrieve the wait chain.
 	if (!GetThreadWaitChain(g_WctHandle,
-		NULL,
-		WCTP_GETINFO_ALL_FLAGS,
-		ThreadId,
-		&Count,
-		NodeInfoArray,
-		&IsCycle))
+	                        NULL,
+	                        WCTP_GETINFO_ALL_FLAGS,
+	                        thread_id,
+	                        &Count,
+	                        NodeInfoArray,
+	                        &IsCycle))
 	{
-		OutString.append(L"Received error in GetThreadWaitChain call: (0X%x)\n", GetLastError());
+		out_string.append(L"Received error in GetThreadWaitChain call: (0X%x)\n", GetLastError());
 		return;
 	}
 
 	// Check if the wait chain is too big for the array we passed in.
 	if (Count > WCT_MAX_NODE_COUNT)
 	{
-		OutString.append(L"Found additional nodes beyond allowed count: %d\n", Count);
+		out_string.append(L"Found additional nodes beyond allowed count: %d\n", Count);
 		Count = WCT_MAX_NODE_COUNT;
 	}
 
 	// Loop over all the nodes returned and print useful information.
 	for (i = 0; i < Count; i++)
 	{
-		std::string test = std::string();
+		std::string thread_string = std::string();
 		std::wstring testing = std::wstring();
 		switch (NodeInfoArray[i].ObjectType)
 		{
 		case WctThreadType:
 			// A thread node contains process and thread ID.
-			test = "[";
-			test += std::to_string(NodeInfoArray[i].ThreadObject.ProcessId) + ":";
-			test += std::to_string(NodeInfoArray[i].ThreadObject.ThreadId) + ":";
-			test += (NodeInfoArray[i].ObjectStatus == WctStatusBlocked) ? "blocked" : "running";
-			test += "]->";
-			testing = std::wstring(test.begin(), test.end());
-			OutString.append(testing);
+			thread_string = "[";
+			thread_string += std::to_string(NodeInfoArray[i].ThreadObject.ProcessId) + ":";
+			thread_string += std::to_string(NodeInfoArray[i].ThreadObject.ThreadId) + ":";
+			thread_string += (NodeInfoArray[i].ObjectStatus == WctStatusBlocked) ? "blocked" : "running";
+			thread_string += "]->";
+			testing = std::wstring(thread_string.begin(), thread_string.end());
+			out_string.append(testing);
 			break;
 
 		default:
 			// It is a synchronization object and some of these objects have names.
 			if (NodeInfoArray[i].LockObject.ObjectName[0] != L'\0')
 			{
-				test = "[";
-				test += STR_OBJECT_TYPE[NodeInfoArray[i].ObjectType - 1].Desc;
-				test += ":";
+				thread_string = "[";
+				thread_string += str_object_type[NodeInfoArray[i].ObjectType - 1].Desc;
+				thread_string += ":";
 				WCHAR * objName = NodeInfoArray[i].LockObject.ObjectName;
 				char ch[260];
 				char DefChar = ' ';
-				WideCharToMultiByte(CP_ACP, 0, objName, -1, ch, 260, &DefChar, NULL);
-				test += std::string(ch);
-				test += "]->";
-				testing = std::wstring(test.begin(), test.end());
-				OutString.append(testing);
+				WideCharToMultiByte(CP_ACP, 0, objName, -1, ch, 260, &DefChar, nullptr);
+				thread_string += std::string(ch);
+				thread_string += "]->";
+				testing = std::wstring(thread_string.begin(), thread_string.end());
+				out_string.append(testing);
 			}
 			else
 			{
-				test = "[";
-				test += STR_OBJECT_TYPE[NodeInfoArray[i].ObjectType - 1].Desc;
-				test += "]->";
-				testing = std::wstring(test.begin(), test.end());
-				OutString.append(testing);
+				thread_string = "[";
+				thread_string += str_object_type[NodeInfoArray[i].ObjectType - 1].Desc;
+				thread_string += "]->";
+				testing = std::wstring(thread_string.begin(), thread_string.end());
+				out_string.append(testing);
 			}
 			if (NodeInfoArray[i].ObjectStatus == WctStatusAbandoned)
 			{
-				OutString.append(L"<abandoned>");
+				out_string.append(L"<abandoned>");
 			}
 			break;
 		}
 	}
 
-	OutString.append(L"[End]");
+	out_string.append(L"[End]");
 
 	// Did we find a deadlock?
 	if (IsCycle)
 	{
-		OutString.append(L" !!!Deadlock!!! ");
+		out_string.append(L" !!!Deadlock!!! ");
 	}
 
-	OutString.append(L"\n");
+	out_string.append(L"\n");
 }
 
-extern "C" __declspec(dllexport) LPCWSTR _cdecl
-WctEntry(
-	__in DWORD procId
+extern "C"
+{
+__declspec(dllexport) LPCWSTR _cdecl WctEntry(
+	// ReSharper disable CppParameterMayBeConst
+	__in DWORD proc_id
+	// ReSharper restore CppParameterMayBeConst
 )
 /*++
 
@@ -378,44 +397,44 @@ Routine Description:
 
 --*/
 {
-	OutString = L"";
-	HANDLE processHandle = INVALID_HANDLE_VALUE;
-	HANDLE processSnapShotHandle = INVALID_HANDLE_VALUE;
+	out_string = L"";
+	HANDLE process_handle = INVALID_HANDLE_VALUE;
+	HANDLE process_snap_shot_handle = INVALID_HANDLE_VALUE;
 
 	// Initialize the WCT interface to COM. Fail if this fails.
-	if (!InitCOMAccess())
+	if (!init_com_access())
 	{
-		OutString.append(L"Could not enable COM access\n");
-		goto Cleanup;
+		out_string.append(L"Could not enable COM access\n");
+		goto Cleanup; // NOLINT
 	}
 
 	// Open a synchronous WCT session.
-	g_WctHandle = OpenThreadWaitChainSession(0, NULL);
-	if (g_WctHandle == NULL || g_WctHandle == INVALID_HANDLE_VALUE)
+	g_WctHandle = OpenThreadWaitChainSession(0, nullptr);
+	if (g_WctHandle == nullptr || g_WctHandle == INVALID_HANDLE_VALUE)
 	{
-		OutString.append(L"ERROR: OpenThreadWaitChainSession failed\n");
-		goto Cleanup;
+		out_string.append(L"ERROR: OpenThreadWaitChainSession failed\n");
+		goto Cleanup; // NOLINT
 	}
 
 	if (GrantDebugPrivilege())
 	{
-		processHandle = GetProcessHandle(procId);
-		if (processHandle != NULL || processHandle != INVALID_HANDLE_VALUE)
+		process_handle = GetProcessHandle(proc_id);
+		if (process_handle != nullptr || process_handle != INVALID_HANDLE_VALUE)
 		{
-			processSnapShotHandle = GetProcessSnapShotHandle(processHandle);
-			if (processSnapShotHandle != NULL || processSnapShotHandle != INVALID_HANDLE_VALUE)
+			process_snap_shot_handle = get_process_snap_shot_handle(process_handle);
+			if (process_snap_shot_handle != nullptr || process_snap_shot_handle != INVALID_HANDLE_VALUE)
 			{
 				// Only enumerate threads in the specified process.
-				WalkThreadsAndPrintChains(processHandle, processSnapShotHandle);
-				goto Cleanup;
+				walk_threads_and_print_chains(process_handle, process_snap_shot_handle);
+				goto Cleanup; // NOLINT
 			}
-			goto Cleanup;
+			goto Cleanup; // NOLINT
 		}
 	}
 	else
 	{
-		OutString.append(L"ERROR: GrantDebugPrivilege failed\n");
-		goto Cleanup;
+		out_string.append(L"ERROR: GrantDebugPrivilege failed\n");
+		goto Cleanup; // NOLINT
 	}
 
 
@@ -424,14 +443,14 @@ Routine Description:
 
 Cleanup:
 
-	if (NULL != g_Ole32Hnd)
+	if (nullptr != g_Ole32Hnd)
 	{
 		FreeLibrary(g_Ole32Hnd);
 	}
 
 	// Don't want to leak handles with every run.
-	CloseHandle(processHandle);
-	CloseHandle(processSnapShotHandle);
+	CloseHandle(process_handle);
+	CloseHandle(process_snap_shot_handle);
 
 	// Because Native Run-time controls the lifetime of the std::wstring object,
 	// we must copy it to a structure that .NET can Marshal the pointer to and will
@@ -439,6 +458,10 @@ Cleanup:
 	// To demonstrate this problem, try returning the std::wstring as a wchar_t* and
 	// notice that you'll hit a NullReferencePointer or a MemoryAccessViolation when
 	// trying to return that object directly back to the .NET caller.
-	LPCWSTR newLPWSTR = LPCWSTR(OutString.c_str());
-	return newLPWSTR;
+
+	// ReSharper disable CppLocalVariableMayBeConst  
+	LPCWSTR new_lpwstr = LPCWSTR(out_string.c_str()); // NOLINT
+	// ReSharper restore CppLocalVariableMayBeConst
+	return new_lpwstr;
+}
 }

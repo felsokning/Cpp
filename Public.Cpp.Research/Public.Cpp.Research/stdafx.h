@@ -9,14 +9,13 @@
 
 #define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers
 // Windows Header Files
-#include <windows.h>
-
+#include <Windows.h>
 
 
 // reference additional headers your program requires here
 #include <atlbase.h>
 #include <atlconv.h>
-#include <psapi.h>
+#include <Psapi.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,7 +23,7 @@
 #include <string>
 #include <time.h>
 #include <timeapi.h>
-#include <tlhelp32.h>
+#include <TlHelp32.h>
 #include <VersionHelpers.h>
 #include <wchar.h>
 #include <wct.h>
